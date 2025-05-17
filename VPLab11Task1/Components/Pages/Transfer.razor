@@ -1,0 +1,175 @@
+﻿@page "/transfer"
+@using Microsoft.Data.SqlClient
+@using System.ComponentModel.DataAnnotations
+@inject IConfiguration Configuration
+@rendermode InteractiveServer
+@using VPLab11Task1.Models
+@inject IBankService BankService
+
+<div class="container mt-4">
+    <h3 class="mb-4 text-primary">Fund Transfer System</h3>
+
+    <!-- Transfer Form -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0">Transfer Funds</h5>
+        </div>
+        <div class="card-body">
+            <EditForm Model="transferModel" OnValidSubmit="HandleTransfer" class="needs-validation">
+                <DataAnnotationsValidator />
+                <div class="mb-3">
+                    <label for="sender" class="form-label">Sender Account</label>
+                    <InputSelect id="sender" @bind-Value="transferModel.FromAccountId" class="form-select">
+                        <option value="0" disabled selected>Select Sender</option>
+                        @foreach (var account in accounts)
+                        {
+                            <option value="@account.AccountId">@account.AccountHolder (ID: @account.AccountId)</option>
+                        }
+                    </InputSelect>
+                    <ValidationMessage For="@(() => transferModel.FromAccountId)" class="text-danger" />
+                </div>
+                <div class="mb-3">
+                    <label for="receiver" class="form-label">Receiver Account</label>
+                    <InputSelect id="receiver" @bind-Value="transferModel.ToAccountId" class="form-select">
+                        <option value="0" disabled selected>Select Receiver</option>
+                        @foreach (var account in accounts)
+                        {
+                            <option value="@account.AccountId">@account.AccountHolder (ID: @account.AccountId)</option>
+                        }
+                    </InputSelect>
+                    <ValidationMessage For="@(() => transferModel.ToAccountId)" class="text-danger" />
+                </div>
+                <div class="mb-3">
+                    <label for="amount" class="form-label">Amount (PKR)</label>
+                    <InputNumber id="amount" @bind-Value="transferModel.Amount" class="form-control" />
+                    <ValidationMessage For="@(() => transferModel.Amount)" class="text-danger" />
+                </div>
+                <button type="submit" class="btn btn-primary">Transfer</button>
+            </EditForm>
+            @if (!string.IsNullOrEmpty(message))
+            {
+                <div class="alert @(success ? "alert-success" : "alert-danger") mt-3" role="alert">
+                    @message
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- Balance Overview -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-info text-white">
+            <h5 class="mb-0">Account Balances</h5>
+        </div>
+        <div class="card-body">
+            @if (accounts.Any())
+            {
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th scope="col">ID</th>
+                            <th scope="col">Account Holder</th>
+                            <th scope="col">Balance (PKR)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var account in accounts)
+                        {
+                            <tr>
+                                <td>@account.AccountId</td>
+                                <td>@account.AccountHolder</td>
+                                <td>@account.Balance.ToString("C", new System.Globalization.CultureInfo("en-PK"))</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+            else
+            {
+                <p class="text-muted">No accounts found.</p>
+            }
+        </div>
+    </div>
+
+    <!-- Transaction History -->
+    <div class="card shadow-sm">
+        <div class="card-header bg-success text-white">
+            <h5 class="mb-0">Transaction History</h5>
+        </div>
+        <div class="card-body">
+            @if (transactions.Any())
+            {
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th scope="col">ID</th>
+                            <th scope="col">From</th>
+                            <th scope="col">To</th>
+                            <th scope="col">Amount (PKR)</th>
+                            <th scope="col">Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var transaction in transactions)
+                        {
+                            <tr>
+                                <td>@transaction.TransactionId</td>
+                                <td>@transaction.FromAccountHolder (ID: @transaction.FromAccountId)</td>
+                                <td>@transaction.ToAccountHolder (ID: @transaction.ToAccountId)</td>
+                                <td>@transaction.Amount.ToString("C", new System.Globalization.CultureInfo("en-PK"))</td>
+                                <td>@transaction.TransferDate.ToString("dd-MM-yyyy HH:mm")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+            else
+            {
+                <p class="text-muted">No transactions found.</p>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private List<Account> accounts = [];
+    private List<Transaction> transactions = [];
+    private TransferModel transferModel = new();
+    private string? message;
+    private bool success;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDataAsync();
+    }
+
+    private async Task LoadDataAsync()
+    {
+        accounts = await BankService.GetAccountsAsync();
+        transactions = await BankService.GetTransactionsAsync();
+    }
+
+    private async Task HandleTransfer()
+    {
+        message = null;
+        if (transferModel.FromAccountId == transferModel.ToAccountId)
+        {
+            message = "Sender and receiver accounts cannot be the same.";
+            success = false;
+            return;
+        }
+
+        try
+        {
+            await BankService.TransferFundsAsync(transferModel);
+            message = "Transfer successful!";
+            success = true;
+            transferModel = new();
+            await LoadDataAsync();
+        }
+        catch (Exception ex)
+        {
+            message = $"Error: {ex.Message}";
+            success = false;
+        }
+    }
+}

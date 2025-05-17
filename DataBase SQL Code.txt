@@ -1,0 +1,80 @@
+CREATE DATABASE BankDB;
+
+
+USE BankDB;
+
+
+CREATE TABLE Accounts (
+    AccountId INT PRIMARY KEY IDENTITY,
+    AccountHolder NVARCHAR(100),
+    Balance DECIMAL(10, 2)
+);
+
+CREATE TABLE Transactions (
+    TransactionId INT PRIMARY KEY IDENTITY,
+    FromAccountId INT,
+    ToAccountId INT,
+    Amount DECIMAL(10, 2),
+    TransferDate DATETIME DEFAULT GETDATE(),
+    FOREIGN KEY (FromAccountId) REFERENCES Accounts(AccountId),
+    FOREIGN KEY (ToAccountId) REFERENCES Accounts(AccountId)
+);
+
+
+INSERT INTO Accounts (AccountHolder, Balance) VALUES
+('Ahmed Khan', 1000.00),
+('Fatima Noor', 1500.00),
+('Ali Raza', 800.00),
+('Sana Malik', 2000.00),
+('Hassan Iqbal', 1200.00);
+
+
+SELECT * FROM Accounts;
+
+
+CREATE PROCEDURE TransferFunds
+    @FromAccountId INT,
+    @ToAccountId INT,
+    @Amount DECIMAL(10, 2)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    BEGIN TRY
+        BEGIN TRANSACTION;
+        
+        -- Check if FromAccount has sufficient balance
+        IF (SELECT Balance FROM Accounts WHERE AccountId = @FromAccountId) < @Amount
+        BEGIN
+            THROW 50001, 'Insufficient balance in sender account.', 1;
+        END
+
+        -- Deduct from sender
+        UPDATE Accounts
+        SET Balance = Balance - @Amount
+        WHERE AccountId = @FromAccountId;
+
+        -- Credit to receiver
+        UPDATE Accounts
+        SET Balance = Balance + @Amount
+        WHERE AccountId = @ToAccountId;
+
+        -- Log the transaction
+        INSERT INTO Transactions (FromAccountId, ToAccountId, Amount)
+        VALUES (@FromAccountId, @ToAccountId, @Amount);
+
+        -- Commit the transaction
+        COMMIT TRANSACTION;
+    END TRY
+    BEGIN CATCH
+        -- Rollback on error
+        ROLLBACK TRANSACTION;
+        -- Return error message
+        DECLARE @ErrorMessage NVARCHAR(4000) = ERROR_MESSAGE();
+        THROW 50000, @ErrorMessage, 1;
+    END CATCH
+END;
+
+
+EXEC TransferFunds @FromAccountId = 1, @ToAccountId = 2, @Amount = 100.00;
+SELECT * FROM Accounts;
+SELECT * FROM Transactions;
